@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vigie — IA &amp; Sécurité</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#12181f;
+    --panel:#1b222c;
+    --panel-2:#212a36;
+    --border:#2a3340;
+    --text:#e7e4da;
+    --muted:#7e8899;
+    --scan:#6fe7c4;
+    --alert:#e2665a;
+    --gold:#c9a227;
+    --slate:#7c93c9;
+    --amber:#f2a65a;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--bg);
+    color:var(--text);
+    font-family:'IBM Plex Sans',sans-serif;
+    min-height:100vh;
+  }
+  .eyebrow{
+    font-family:'IBM Plex Mono',monospace;
+    letter-spacing:.14em;
+    text-transform:uppercase;
+    font-size:11px;
+    color:var(--muted);
+  }
+  header{
+    display:flex;
+    align-items:center;
+    gap:24px;
+    padding:28px 32px 20px;
+    border-bottom:1px solid var(--border);
+    flex-wrap:wrap;
+  }
+  .dial-wrap{
+    position:relative;
+    width:74px;height:74px;
+    flex-shrink:0;
+  }
+  .dial{
+    width:100%;height:100%;
+    border-radius:50%;
+    border:1px solid var(--border);
+    background:
+      radial-gradient(circle at center, transparent 0 62%, var(--border) 62% 63%, transparent 63%),
+      var(--panel);
+    position:relative;
+    overflow:hidden;
+  }
+  .dial::before{
+    content:"";
+    position:absolute;
+    inset:0;
+    background:conic-gradient(from 0deg, rgba(111,231,196,.55), transparent 32%);
+    animation:sweep 4s linear infinite;
+    mix-blend-mode:screen;
+  }
+  @keyframes sweep{ to{ transform:rotate(360deg); } }
+  .dial-center{
+    position:absolute;top:50%;left:50%;
+    width:5px;height:5px;border-radius:50%;
+    background:var(--scan);
+    transform:translate(-50%,-50%);
+    box-shadow:0 0 8px 2px rgba(111,231,196,.7);
+  }
+  .blip{
+    position:absolute;width:5px;height:5px;border-radius:50%;
+    animation:pulse 2.4s ease-in-out infinite;
+  }
+  @keyframes pulse{ 0%,100%{opacity:.35;} 50%{opacity:1;} }
+  .title-block h1{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:22px;
+    font-weight:600;
+    margin:0 0 4px;
+    letter-spacing:.01em;
+  }
+  .title-block .sub{
+    color:var(--muted);
+    font-size:13.5px;
+  }
+  .header-right{
+    margin-left:auto;
+    display:flex;
+    align-items:center;
+    gap:14px;
+    flex-wrap:wrap;
+  }
+  button, .btn{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:12px;
+    letter-spacing:.04em;
+    background:var(--panel-2);
+    color:var(--text);
+    border:1px solid var(--border);
+    border-radius:6px;
+    padding:9px 14px;
+    cursor:pointer;
+    transition:border-color .15s, background .15s;
+  }
+  button:hover{ border-color:var(--scan); }
+  button:disabled{ opacity:.5; cursor:default; }
+  .status-line{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:11px;
+    color:var(--muted);
+  }
+  .status-line .dot{
+    display:inline-block;width:6px;height:6px;border-radius:50%;
+    background:var(--scan);margin-right:6px;
+  }
+  .status-line.scanning .dot{ background:var(--amber); animation:pulse 1s ease-in-out infinite; }
+
+  main{
+    padding:24px 32px 60px;
+    max-width:980px;
+    margin:0 auto;
+  }
+  .toolbar{
+    display:flex;
+    gap:10px;
+    flex-wrap:wrap;
+    align-items:center;
+    margin-bottom:20px;
+  }
+  .pill{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:11.5px;
+    padding:7px 13px;
+    border-radius:999px;
+    border:1px solid var(--border);
+    background:var(--panel);
+    color:var(--muted);
+    cursor:pointer;
+    display:flex;align-items:center;gap:7px;
+    transition:all .15s;
+  }
+  .pill .sw{width:7px;height:7px;border-radius:50%;}
+  .pill.active{ color:var(--text); border-color:currentColor; }
+  .search{
+    margin-left:auto;
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:8px;
+    padding:8px 12px;
+    color:var(--text);
+    font-family:'IBM Plex Sans',sans-serif;
+    font-size:13px;
+    min-width:180px;
+  }
+  .search:focus{ outline:none; border-color:var(--scan); }
+
+  .log{
+    display:flex;
+    flex-direction:column;
+    gap:1px;
+    background:var(--border);
+    border:1px solid var(--border);
+    border-radius:10px;
+    overflow:hidden;
+  }
+  .item{
+    background:var(--panel);
+    padding:16px 18px;
+    display:flex;
+    gap:14px;
+    position:relative;
+  }
+  .item.unread::before{
+    content:"";
+    position:absolute;left:0;top:0;bottom:0;width:3px;
+    background:var(--amber);
+  }
+  .item-bar{ width:3px; flex-shrink:0; border-radius:2px; }
+  .item-body{ flex:1; min-width:0; }
+  .item-meta{
+    display:flex;align-items:center;gap:10px;
+    font-family:'IBM Plex Mono',monospace;
+    font-size:10.5px;
+    color:var(--muted);
+    margin-bottom:6px;
+    flex-wrap:wrap;
+  }
+  .cat-tag{
+    text-transform:uppercase;letter-spacing:.06em;
+    padding:2px 7px;border-radius:4px;
+    border:1px solid currentColor;
+  }
+  .item a.title-link{
+    color:var(--text);
+    text-decoration:none;
+    font-size:15px;
+    font-weight:600;
+    line-height:1.4;
+  }
+  .item a.title-link:hover{ color:var(--scan); }
+  .item .desc{
+    color:var(--muted);
+    font-size:13px;
+    line-height:1.5;
+    margin-top:6px;
+    max-width:70ch;
+  }
+  .item-actions{
+    display:flex;align-items:flex-start;
+  }
+  .mark-btn{
+    background:none;border:none;color:var(--muted);
+    font-family:'IBM Plex Mono',monospace;
+    font-size:10.5px;cursor:pointer;
+    padding:4px 6px;
+  }
+  .mark-btn:hover{ color:var(--scan); }
+
+  .empty, .loading-note{
+    text-align:center;
+    color:var(--muted);
+    padding:50px 20px;
+    font-family:'IBM Plex Mono',monospace;
+    font-size:13px;
+  }
+
+  .feed-admin{
+    margin-top:30px;
+    border-top:1px solid var(--border);
+    padding-top:20px;
+  }
+  .feed-admin summary{
+    cursor:pointer;
+    font-family:'IBM Plex Mono',monospace;
+    font-size:12px;
+    color:var(--muted);
+    letter-spacing:.05em;
+    text-transform:uppercase;
+  }
+  .feed-list{
+    margin-top:16px;
+    display:flex;flex-direction:column;gap:8px;
+  }
+  .feed-row{
+    display:flex;gap:8px;align-items:center;
+    font-size:12.5px;
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:6px;
+    padding:8px 10px;
+  }
+  .feed-row .fname{ flex:1; color:var(--text); }
+  .feed-row .fcat{ color:var(--muted); font-family:'IBM Plex Mono',monospace; font-size:10.5px; }
+  .feed-row .del{
+    background:none;border:none;color:var(--alert);cursor:pointer;font-size:14px;padding:2px 6px;
+  }
+  .add-feed{
+    display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;
+  }
+  .add-feed input, .add-feed select{
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:6px;
+    color:var(--text);
+    padding:8px 10px;
+    font-size:12.5px;
+    font-family:'IBM Plex Sans',sans-serif;
+  }
+  .add-feed input[type=url]{ flex:1; min-width:200px; }
+
+  ::selection{ background:var(--scan); color:#0a0f14; }
+  @media (max-width:600px){
+    header{ padding:20px; }
+    main{ padding:18px; }
+    .item{ padding:14px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="dial-wrap">
+    <div class="dial" id="dial">
+      <div class="dial-center"></div>
+    </div>
+  </div>
+  <div class="title-block">
+    <h1>VIGIE — IA &amp; SÉCURITÉ</h1>
+    <div class="sub" id="lastScan">Prêt à scanner</div>
+  </div>
+  <div class="header-right">
+    <div class="status-line" id="statusLine"><span class="dot"></span><span id="statusText">En veille</span></div>
+    <button id="scanBtn">Scanner maintenant</button>
+    <button id="markAllBtn">Tout marquer lu</button>
+  </div>
+</header>
+
+<main>
+  <div class="toolbar" id="toolbar">
+    <!-- category pills injected here -->
+    <input class="search" id="searchInput" type="text" placeholder="Filtrer par mot-clé…">
+  </div>
+
+  <div class="log" id="log"><div class="loading-note">Cliquez sur « Scanner maintenant » pour lancer la veille.</div></div>
+
+  <details class="feed-admin">
+    <summary>Gérer les sources (<span id="feedCount">0</span>)</summary>
+    <div class="feed-list" id="feedList"></div>
+    <div class="add-feed">
+      <input type="url" id="newFeedUrl" placeholder="URL du flux RSS/Atom">
+      <input type="text" id="newFeedName" placeholder="Nom de la source">
+      <select id="newFeedCat"></select>
+      <button id="addFeedBtn">Ajouter</button>
+    </div>
+  </details>
+</main>
+
+<script>
+const CATEGORIES = [
+  { id:'reglementaire', label:'Réglementaire & normatif', color:'#c9a227' },
+  { id:'recherche',     label:'Recherche & menaces IA',   color:'#6fe7c4' },
+  { id:'vulnerabilites',label:'Vulnérabilités & incidents',color:'#e2665a' },
+  { id:'fournisseurs',  label:'Fournisseurs IA',           color:'#a78bc9' },
+  { id:'outils',        label:'Veille & newsletters',      color:'#7c93c9' },
+];
+
+const DEFAULT_FEEDS = [
+  { name:'ANSSI — Actualités',        url:'https://www.ssi.gouv.fr/feed/actualites/', cat:'reglementaire' },
+  { name:'CNIL — Actualités',         url:'https://www.cnil.fr/fr/rss.xml', cat:'reglementaire' },
+  { name:'NIST — News',               url:'https://www.nist.gov/news-events/news/rss.xml', cat:'reglementaire' },
+  { name:'arXiv — cs.CR (sécurité)',  url:'https://rss.arxiv.org/rss/cs.CR', cat:'recherche' },
+  { name:'arXiv — cs.AI',             url:'https://rss.arxiv.org/rss/cs.AI', cat:'recherche' },
+  { name:'MIT Tech Review — IA',      url:'https://www.technologyreview.com/topic/artificial-intelligence/feed', cat:'recherche' },
+  { name:'The Hacker News',           url:'https://feeds.feedburner.com/TheHackersNews', cat:'vulnerabilites' },
+  { name:'Krebs on Security',         url:'https://krebsonsecurity.com/feed/', cat:'vulnerabilites' },
+  { name:'Schneier on Security',      url:'https://www.schneier.com/feed/atom/', cat:'vulnerabilites' },
+  { name:'OpenAI — News',             url:'https://openai.com/news/rss.xml', cat:'fournisseurs' },
+  { name:'Google DeepMind — Blog',    url:'https://deepmind.google/blog/rss.xml', cat:'fournisseurs' },
+  { name:'Meta — Research',          url:'https://research.facebook.com/feed/', cat:'fournisseurs' },
+  { name:'Microsoft — AI Platform Blog', url:'https://techcommunity.microsoft.com/t5/s/gxcuf89792/rss/board?board.id=AIPlatformBlog', cat:'fournisseurs' },
+  { name:'Import AI (newsletter)',    url:'https://importai.substack.com/feed', cat:'outils' },
+];
+
+let feeds = [];
+let items = [];
+let activeCats = new Set(CATEGORIES.map(c=>c.id));
+let readSet = new Set();
+
+// Stockage local (remplace window.storage, spécifique aux artefacts Claude)
+async function storageGet(key){
+  const v = localStorage.getItem(key);
+  return v !== null ? { value: v } : null;
+}
+async function storageSet(key, value){
+  localStorage.setItem(key, value);
+  return { value };
+}
+
+const catById = id => CATEGORIES.find(c=>c.id===id) || CATEGORIES[3];
+
+function hashKey(link){
+  let h = 0;
+  for(let i=0;i<link.length;i++){ h = (h*31 + link.charCodeAt(i)) | 0; }
+  return 'r' + h;
+}
+
+async function loadState(){
+  let stored = null;
+  try{
+    const f = await storageGet('vigie:feeds');
+    stored = f ? JSON.parse(f.value) : null;
+  }catch(e){ stored = null; }
+  if(stored){
+    const known = new Set(stored.map(f=>f.url));
+    const additions = DEFAULT_FEEDS.filter(f=>!known.has(f.url));
+    feeds = stored.concat(additions);
+    if(additions.length) await saveFeeds();
+  }else{
+    feeds = DEFAULT_FEEDS.slice();
+    await saveFeeds();
+  }
+  try{
+    const r = await storageGet('vigie:read');
+    readSet = r ? new Set(JSON.parse(r.value)) : new Set();
+  }catch(e){ readSet = new Set(); }
+  renderFeedAdmin();
+}
+
+async function saveFeeds(){
+  try{ await storageSet('vigie:feeds', JSON.stringify(feeds)); }catch(e){}
+}
+async function saveRead(){
+  try{ await storageSet('vigie:read', JSON.stringify([...readSet])); }catch(e){}
+}
+
+function renderCatSelect(){
+  const sel = document.getElementById('newFeedCat');
+  sel.innerHTML = CATEGORIES.map(c=>`<option value="${c.id}">${c.label}</option>`).join('');
+}
+
+function renderToolbar(){
+  const bar = document.getElementById('toolbar');
+  const search = document.getElementById('searchInput');
+  bar.querySelectorAll('.pill').forEach(p=>p.remove());
+  CATEGORIES.forEach(c=>{
+    const p = document.createElement('div');
+    p.className = 'pill' + (activeCats.has(c.id) ? ' active' : '');
+    p.style.color = activeCats.has(c.id) ? c.color : '';
+    p.innerHTML = `<span class="sw" style="background:${c.color}"></span>${c.label}`;
+    p.onclick = ()=>{
+      if(activeCats.has(c.id)) activeCats.delete(c.id); else activeCats.add(c.id);
+      renderToolbar();
+      renderLog();
+    };
+    bar.insertBefore(p, search);
+  });
+}
+
+function renderFeedAdmin(){
+  document.getElementById('feedCount').textContent = feeds.length;
+  const list = document.getElementById('feedList');
+  list.innerHTML = feeds.map((f,i)=>{
+    const c = catById(f.cat);
+    return `<div class="feed-row">
+      <span class="fname">${f.name}</span>
+      <span class="fcat" style="color:${c.color}">${c.label}</span>
+      <button class="del" data-idx="${i}" title="Retirer">✕</button>
+    </div>`;
+  }).join('');
+  list.querySelectorAll('.del').forEach(btn=>{
+    btn.onclick = async ()=>{
+      feeds.splice(Number(btn.dataset.idx),1);
+      await saveFeeds();
+      renderFeedAdmin();
+    };
+  });
+}
+
+function setStatus(text, scanning){
+  document.getElementById('statusText').textContent = text;
+  document.getElementById('statusLine').classList.toggle('scanning', !!scanning);
+}
+
+async function fetchFeedViaRss2json(url){
+  const api = 'https://api.rss2json.com/v1/api.json?rss_url=' + encodeURIComponent(url);
+  const res = await fetch(api);
+  const data = await res.json();
+  if(data.status !== 'ok') throw new Error('rss2json failed');
+  return data.items.map(it => ({
+    title: it.title,
+    link: it.link,
+    pubDate: it.pubDate,
+    description: (it.description || '').replace(/<[^>]+>/g,'').slice(0,220)
+  }));
+}
+
+function parseXmlFeed(text){
+  const doc = new DOMParser().parseFromString(text, 'text/xml');
+  if(doc.querySelector('parsererror')) throw new Error('bad xml');
+  const entries = [...doc.querySelectorAll('item')].length
+    ? [...doc.querySelectorAll('item')]
+    : [...doc.querySelectorAll('entry')];
+  if(!entries.length) throw new Error('no entries');
+  return entries.slice(0,20).map(el=>{
+    const get = tag => el.querySelector(tag)?.textContent || '';
+    let link = get('link');
+    if(!link){
+      const linkEl = el.querySelector('link');
+      link = linkEl ? (linkEl.getAttribute('href') || '') : '';
+    }
+    return {
+      title: get('title'),
+      link,
+      pubDate: get('pubDate') || get('published') || get('updated'),
+      description: (get('description') || get('summary') || '').replace(/<[^>]+>/g,'').slice(0,220)
+    };
+  });
+}
+
+async function fetchFeedViaProxy(url){
+  const api = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(url);
+  const res = await fetch(api);
+  const text = await res.text();
+  return parseXmlFeed(text);
+}
+
+async function fetchFeedViaCodetabs(url){
+  const api = 'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(url);
+  const res = await fetch(api);
+  const text = await res.text();
+  return parseXmlFeed(text);
+}
+
+async function fetchFeed(feed){
+  const attempts = [fetchFeedViaRss2json, fetchFeedViaProxy, fetchFeedViaCodetabs];
+  for(const attempt of attempts){
+    try{
+      const its = await attempt(feed.url);
+      if(its && its.length) return { feed, items: its, ok:true };
+    }catch(e){ /* try next */ }
+  }
+  return { feed, items:[], ok:false };
+}
+
+async function scan(){
+  setStatus('Scan en cours…', true);
+  document.getElementById('scanBtn').disabled = true;
+  const results = await Promise.allSettled(feeds.map(fetchFeed));
+  let allItems = [];
+  let failCount = 0;
+  let failedNames = [];
+  results.forEach(r=>{
+    if(r.status === 'fulfilled'){
+      const { feed, items: its, ok } = r.value;
+      if(!ok){ failCount++; failedNames.push(feed.name); }
+      its.forEach(it=>{
+        if(!it.link) return;
+        allItems.push({
+          ...it,
+          source: feed.name,
+          cat: feed.cat,
+          key: hashKey(it.link),
+          date: it.pubDate ? new Date(it.pubDate) : new Date(0)
+        });
+      });
+    }
+  });
+  allItems.sort((a,b)=> b.date - a.date);
+  items = allItems;
+  document.getElementById('lastScan').textContent =
+    `Dernier scan : ${new Date().toLocaleString('fr-FR')}` +
+    (failCount ? ` — indisponibles : ${failedNames.join(', ')}` : '');
+  setStatus(failCount ? `${failCount} flux en échec` : 'À jour', false);
+  document.getElementById('scanBtn').disabled = false;
+  renderLog();
+}
+
+function renderLog(){
+  const log = document.getElementById('log');
+  const q = document.getElementById('searchInput').value.trim().toLowerCase();
+  const filtered = items.filter(it=>{
+    if(!activeCats.has(it.cat)) return false;
+    if(q && !(it.title.toLowerCase().includes(q) || it.description.toLowerCase().includes(q))) return false;
+    return true;
+  });
+  if(!filtered.length){
+    log.innerHTML = '<div class="empty">Aucun signal pour ce filtre.</div>';
+    return;
+  }
+  log.innerHTML = filtered.map(it=>{
+    const c = catById(it.cat);
+    const unread = !readSet.has(it.key);
+    const dateStr = it.date && it.date.getTime() ? it.date.toLocaleDateString('fr-FR', {day:'2-digit',month:'short',year:'numeric'}) : '';
+    return `<div class="item ${unread?'unread':''}" data-key="${it.key}">
+      <div class="item-body">
+        <div class="item-meta">
+          <span class="cat-tag" style="color:${c.color}">${c.label}</span>
+          <span>${it.source}</span>
+          <span>${dateStr}</span>
+        </div>
+        <a class="title-link" href="${it.link}" target="_blank" rel="noopener">${it.title}</a>
+        ${it.description ? `<div class="desc">${it.description}${it.description.length>=220?'…':''}</div>` : ''}
+      </div>
+      <div class="item-actions">
+        <button class="mark-btn" data-key="${it.key}">${unread ? 'Marquer lu' : 'Lu ✓'}</button>
+      </div>
+    </div>`;
+  }).join('');
+  log.querySelectorAll('.mark-btn').forEach(btn=>{
+    btn.onclick = async ()=>{
+      readSet.add(btn.dataset.key);
+      await saveRead();
+      renderLog();
+    };
+  });
+}
+
+document.getElementById('scanBtn').onclick = scan;
+document.getElementById('markAllBtn').onclick = async ()=>{
+  items.forEach(it=>readSet.add(it.key));
+  await saveRead();
+  renderLog();
+};
+document.getElementById('searchInput').oninput = renderLog;
+document.getElementById('addFeedBtn').onclick = async ()=>{
+  const url = document.getElementById('newFeedUrl').value.trim();
+  const name = document.getElementById('newFeedName').value.trim();
+  const cat = document.getElementById('newFeedCat').value;
+  if(!url || !name) return;
+  feeds.push({ name, url, cat });
+  await saveFeeds();
+  document.getElementById('newFeedUrl').value = '';
+  document.getElementById('newFeedName').value = '';
+  renderFeedAdmin();
+};
+
+(async function init(){
+  renderCatSelect();
+  await loadState();
+  renderToolbar();
+  scan();
+})();
+</script>
+</body>
+</html>
