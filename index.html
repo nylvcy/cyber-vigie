@@ -148,6 +148,31 @@
   }
   .pill .sw{width:7px;height:7px;border-radius:50%;}
   .pill.active{ color:var(--text); border-color:currentColor; }
+  .days-filter, .focus-toggle{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:11.5px;
+    color:var(--muted);
+    display:flex;align-items:center;gap:6px;
+    padding:7px 13px;
+    border-radius:999px;
+    border:1px solid var(--border);
+    background:var(--panel);
+    white-space:nowrap;
+  }
+  .days-filter input[type=number]{
+    width:44px;
+    background:var(--panel-2);
+    border:1px solid var(--border);
+    border-radius:4px;
+    color:var(--text);
+    font-family:'IBM Plex Mono',monospace;
+    font-size:11.5px;
+    padding:2px 4px;
+    text-align:center;
+  }
+  .days-filter input[type=number]:focus{ outline:none; border-color:var(--scan); }
+  .focus-toggle input[type=checkbox]{ accent-color:var(--scan); cursor:pointer; }
+  .focus-toggle{ cursor:pointer; }
   .search{
     margin-left:auto;
     background:var(--panel);
@@ -305,6 +330,8 @@
 <main>
   <div class="toolbar" id="toolbar">
     <!-- category pills injected here -->
+    <label class="days-filter" for="daysInput">Afficher les <input type="number" id="daysInput" min="1" max="365" value="7">&nbsp;derniers jours</label>
+    <label class="focus-toggle"><input type="checkbox" id="focusToggle" checked> Focus IA &amp; cybersécurité</label>
     <input class="search" id="searchInput" type="text" placeholder="Filtrer par mot-clé…">
   </div>
 
@@ -332,7 +359,7 @@ const CATEGORIES = [
 ];
 
 const DEFAULT_FEEDS = [
-  { name:'ANSSI — Actualités',        url:'https://www.ssi.gouv.fr/feed/actualites/', cat:'reglementaire' },
+  { name:'ANSSI — Actualités',        url:'https://www.ssi.gouv.fr/actualites/rss/', cat:'reglementaire' },
   { name:'CNIL — Actualités',         url:'https://www.cnil.fr/fr/rss.xml', cat:'reglementaire' },
   { name:'NIST — News',               url:'https://www.nist.gov/news-events/news/rss.xml', cat:'reglementaire' },
   { name:'arXiv — cs.CR (sécurité)',  url:'https://rss.arxiv.org/rss/cs.CR', cat:'recherche' },
@@ -342,16 +369,36 @@ const DEFAULT_FEEDS = [
   { name:'Krebs on Security',         url:'https://krebsonsecurity.com/feed/', cat:'vulnerabilites' },
   { name:'Schneier on Security',      url:'https://www.schneier.com/feed/atom/', cat:'vulnerabilites' },
   { name:'OpenAI — News',             url:'https://openai.com/news/rss.xml', cat:'fournisseurs' },
+  { name:'Anthropic — Actualités',    url:'https://news.google.com/rss/search?q=Anthropic+Claude+AI&hl=en-US&gl=US&ceid=US:en', cat:'fournisseurs' },
   { name:'Google DeepMind — Blog',    url:'https://deepmind.google/blog/rss.xml', cat:'fournisseurs' },
-  { name:'Meta — Research',          url:'https://research.facebook.com/feed/', cat:'fournisseurs' },
-  { name:'Microsoft — AI Platform Blog', url:'https://techcommunity.microsoft.com/t5/s/gxcuf89792/rss/board?board.id=AIPlatformBlog', cat:'fournisseurs' },
   { name:'Import AI (newsletter)',    url:'https://importai.substack.com/feed', cat:'outils' },
 ];
+
+// Mots-clés définissant le périmètre « IA & cybersécurité ». Un article doit
+// matcher au moins un terme IA ou au moins un terme sécurité pour être jugé pertinent.
+const AI_KEYWORDS = [
+  'ia ','intelligence artificielle','ai ',' ai,',' ai.','ai-','genai','gen ai','llm','gpt','chatgpt','claude',
+  'anthropic','openai','deepmind','copilot','gemini','mistral','machine learning','deep learning',
+  'modèle de langage','modele de langage','agent ia','agentic','neural network','réseau de neurones',
+  'reseau de neurones','transformer','algorithme'
+];
+const SEC_KEYWORDS = [
+  'cyber','sécurité','securite','vulnérabilit','vulnerabilit','faille','cve-','ransomware','malware',
+  'phishing','hameçonnage','hameconnage','exploit','breach','fuite de données','fuite de donnees',
+  'attaque','hack','piratage','rgpd','gdpr','conformité','conformite','risque','menace','threat',
+  'incident','patch','zero-day','0-day','chiffrement','encryption','authentification','pare-feu','firewall'
+];
+function isOnTopic(it){
+  const hay = ((it.title||'') + ' ' + (it.description||'')).toLowerCase();
+  return AI_KEYWORDS.some(k=>hay.includes(k)) || SEC_KEYWORDS.some(k=>hay.includes(k));
+}
 
 let feeds = [];
 let items = [];
 let activeCats = new Set(CATEGORIES.map(c=>c.id));
 let readSet = new Set();
+let daysFilter = 7;
+let focusOn = true;
 
 // Stockage local (remplace window.storage, spécifique aux artefacts Claude)
 async function storageGet(key){
@@ -371,6 +418,15 @@ function hashKey(link){
   return 'r' + h;
 }
 
+// Migrations pour les flux déjà enregistrés côté navigateur : URL cassées à
+// corriger, ou sources mortes à retirer (ex. Meta Research à l'arrêt depuis 2023,
+// board Microsoft supprimé).
+const FEED_MIGRATIONS = {
+  'https://www.ssi.gouv.fr/feed/actualites/': 'https://www.ssi.gouv.fr/actualites/rss/',
+  'https://research.facebook.com/feed/': null,
+  'https://techcommunity.microsoft.com/t5/s/gxcuf89792/rss/board?board.id=AIPlatformBlog': null,
+};
+
 async function loadState(){
   let stored = null;
   try{
@@ -378,10 +434,21 @@ async function loadState(){
     stored = f ? JSON.parse(f.value) : null;
   }catch(e){ stored = null; }
   if(stored){
+    let migrated = false;
+    stored = stored.reduce((acc,f)=>{
+      if(Object.prototype.hasOwnProperty.call(FEED_MIGRATIONS, f.url)){
+        migrated = true;
+        const replacement = FEED_MIGRATIONS[f.url];
+        if(replacement) acc.push({ ...f, url: replacement });
+      }else{
+        acc.push(f);
+      }
+      return acc;
+    }, []);
     const known = new Set(stored.map(f=>f.url));
     const additions = DEFAULT_FEEDS.filter(f=>!known.has(f.url));
     feeds = stored.concat(additions);
-    if(additions.length) await saveFeeds();
+    if(additions.length || migrated) await saveFeeds();
   }else{
     feeds = DEFAULT_FEEDS.slice();
     await saveFeeds();
@@ -390,6 +457,16 @@ async function loadState(){
     const r = await storageGet('vigie:read');
     readSet = r ? new Set(JSON.parse(r.value)) : new Set();
   }catch(e){ readSet = new Set(); }
+  try{
+    const d = await storageGet('vigie:days');
+    daysFilter = d ? Number(d.value) || 7 : 7;
+  }catch(e){ daysFilter = 7; }
+  try{
+    const f = await storageGet('vigie:focus');
+    focusOn = f ? f.value === '1' : true;
+  }catch(e){ focusOn = true; }
+  document.getElementById('daysInput').value = daysFilter;
+  document.getElementById('focusToggle').checked = focusOn;
   renderFeedAdmin();
 }
 
@@ -398,6 +475,12 @@ async function saveFeeds(){
 }
 async function saveRead(){
   try{ await storageSet('vigie:read', JSON.stringify([...readSet])); }catch(e){}
+}
+async function saveDays(){
+  try{ await storageSet('vigie:days', String(daysFilter)); }catch(e){}
+}
+async function saveFocus(){
+  try{ await storageSet('vigie:focus', focusOn ? '1' : '0'); }catch(e){}
 }
 
 function renderCatSelect(){
@@ -545,8 +628,11 @@ async function scan(){
 function renderLog(){
   const log = document.getElementById('log');
   const q = document.getElementById('searchInput').value.trim().toLowerCase();
+  const cutoff = Date.now() - daysFilter * 24 * 60 * 60 * 1000;
   const filtered = items.filter(it=>{
     if(!activeCats.has(it.cat)) return false;
+    if(it.date && it.date.getTime() < cutoff) return false;
+    if(focusOn && !isOnTopic(it)) return false;
     if(q && !(it.title.toLowerCase().includes(q) || it.description.toLowerCase().includes(q))) return false;
     return true;
   });
@@ -589,6 +675,18 @@ document.getElementById('markAllBtn').onclick = async ()=>{
   renderLog();
 };
 document.getElementById('searchInput').oninput = renderLog;
+document.getElementById('daysInput').onchange = async (e)=>{
+  const v = Math.max(1, Math.min(365, Number(e.target.value) || 7));
+  daysFilter = v;
+  e.target.value = v;
+  await saveDays();
+  renderLog();
+};
+document.getElementById('focusToggle').onchange = async (e)=>{
+  focusOn = e.target.checked;
+  await saveFocus();
+  renderLog();
+};
 document.getElementById('addFeedBtn').onclick = async ()=>{
   const url = document.getElementById('newFeedUrl').value.trim();
   const name = document.getElementById('newFeedName').value.trim();
